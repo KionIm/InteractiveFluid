@@ -1,0 +1,56 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+struct NSEqData
+{
+    float P;
+    float U;
+    float V;
+    float B;
+};
+
+struct NSEqPData
+{
+    float P;
+};
+
+cbuffer CB {
+    int NumWidth;
+    int NumHeight;
+    float sharpness;
+    float mousePosu;
+    float mousePosv;
+    float dx;
+    float dy;
+    float Attenuation;
+    //float dt;
+    //float rho;
+};
+
+RWStructuredBuffer<NSEqData> _BufferWrite;
+RWStructuredBuffer<NSEqPData> _BufferPRead;
+RWStructuredBuffer<NSEqPData> _BufferPAssetRead;
+
+[numthreads(1000,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint ix = id.x / NumHeight;
+    uint iy = id.x % NumHeight;
+
+    float Value = -sharpness * (pow((float)(ix - mousePosu * NumWidth) / (NumWidth / 2), 2)
+                   + pow((float)(iy - mousePosv * NumHeight) / (NumHeight / 2), 2));
+
+    float PW = max(exp(Value),_BufferPRead[id.x].P);
+    PW = max(PW,_BufferPAssetRead[id.x].P);
+    if(PW>1.0){
+        PW = 1.0;
+    }
+    if(PW<0.0){
+        PW=0.0;
+    }
+
+    float AttenuationP = -Attenuation * cos(3.1415 * PW) + Attenuation + 1.0;
+    PW /= AttenuationP;
+
+    _BufferWrite[id.x].P = PW;
+}

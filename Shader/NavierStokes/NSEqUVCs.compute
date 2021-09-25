@@ -1,0 +1,77 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+struct NSEqData
+{
+    float P;
+    float U;
+    float V;
+    float B;
+};
+
+cbuffer CB {
+    int NumWidth;
+    int NumHeight;
+    float rho;
+    float dx;
+    float dy;
+    float dt;
+    float nu;
+}
+
+float UCalculator(float Uij,float Uijm,float Uijp,float Uimj,float Uipj,
+                  float Pipj,float Pimj,float Vij)
+{
+    float Unp;
+    Unp = Uij - Uij*(Uij-Uimj)*dt/dx - Vij*(Uij-Uijm)*dt/dy;
+    Unp -= (Pipj-Pimj)*dt/(rho*rho*dx);
+    Unp += (Uipj -2*Uij + Uimj)*nu*dt/(dx*dx);
+    Unp += (Uijp -2*Uij + Uijm)*nu*dt/(dy*dy);
+
+    return Unp;
+}
+
+float VCalculator(float Vij,float Vijm,float Vijp,float Vimj,float Vipj,
+                  float Pijp,float Pijm,float Uij)
+{
+    float Vnp;
+    Vnp = Vij - Uij*(Vij-Vimj)*dt/dx - Vij*(Vij-Vijm)*dt/dy;
+    Vnp -= (Pijp-Pijm)*dt/(rho*rho*dy);
+    Vnp += (Vipj -2*Vij + Vimj)*nu*dt/(dx*dx);
+    Vnp += (Vijp -2*Vij + Vijm)*nu*dt/(dy*dy);
+
+    return Vnp;
+}
+
+RWStructuredBuffer<NSEqData> _BufferRead;
+RWStructuredBuffer<NSEqData> _BufferWrite;
+
+[numthreads(1000,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x / NumHeight;
+    uint j = id.x % NumHeight;
+    
+    float Uij = _BufferRead[i*NumHeight+j].U;
+    float Uipj =_BufferRead[((i + 1)%NumWidth)* NumHeight + j].U;
+    float Uimj = _BufferRead[((i - 1+NumWidth)%NumWidth)*NumHeight + j].U;
+    float Uijp = _BufferRead[i * NumHeight + (j+1)%NumHeight].U;
+    float Uijm = _BufferRead[i * NumHeight + (j-1+NumHeight)%NumHeight].U;
+
+    float Vij = _BufferRead[i*NumHeight+j].V;
+    float Vipj =_BufferRead[((i + 1)%NumWidth)* NumHeight + j].V;
+    float Vimj = _BufferRead[((i - 1+NumWidth)%NumWidth)*NumHeight + j].V;
+    float Vijp = _BufferRead[i * NumHeight + (j+1)%NumHeight].V;
+    float Vijm = _BufferRead[i * NumHeight + (j-1+NumHeight)%NumHeight].V;
+
+    float Pipj =_BufferWrite[((i + 1)%NumWidth)* NumHeight + j].P;
+    float Pimj = _BufferWrite[((i - 1+NumWidth)%NumWidth)*NumHeight + j].P;
+    float Pijp = _BufferWrite[i * NumHeight + (j+1)%NumHeight].P;
+    float Pijm = _BufferWrite[i * NumHeight + (j-1+NumHeight)%NumHeight].P;
+
+    Uij = UCalculator(Uij,Uijm,Uijp,Uimj,Uipj,Pipj,Pimj,Vij);
+    Vij = VCalculator(Vij,Vijm,Vijp,Vimj,Vipj,Pijp,Pijm,Uij);
+
+    _BufferWrite[id.x].U = Uij;
+    _BufferWrite[id.x].V = Vij;
+}

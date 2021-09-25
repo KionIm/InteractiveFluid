@@ -1,0 +1,67 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+struct NSEqData
+{
+    float P;
+    float U;
+    float V;
+    float B;
+};
+
+cbuffer CB {
+    int NumWidth;
+    int NumHeight;
+    float rho;
+    float dx;
+    float dy;
+    float dt;
+};
+
+RWStructuredBuffer<NSEqData> _BufferRead;
+RWStructuredBuffer<NSEqData> _BufferWrite;
+
+float BCalculator(float Uij,float Uipj,float Uimj,float Uijp,float Uijm,
+                  float Vij,float Vijm,float Vijp,float Vimj,float Vipj){
+    float Bij;
+
+    Bij = (Uipj - Uimj)/(2*dx*dt) + (Vijp - Vijm)/(2*dy*dt);
+
+    Bij -= (Uipj-Uimj)*(Uipj-Uimj)/(4*dx*dx);
+    Bij -= 2*(Uijp-Uijm)*(Vipj-Vimj)/(4*dx*dy);
+    Bij -= (Vijp-Vijm)*(Vijp-Vijm)/(4*dy*dy);
+
+    Bij *= rho;
+
+    return Bij;
+}
+
+
+[numthreads(1000,1,1)]
+
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x / NumHeight;
+    uint j = id.x % NumHeight;
+
+    float Uij = _BufferRead[i*NumHeight+j].U;
+    float Uipj =_BufferRead[((i + 1)%NumWidth)* NumHeight + j].U;
+    float Uimj = _BufferRead[((i - 1+NumWidth)%NumWidth)*NumHeight + j].U;
+    float Uijp = _BufferRead[i * NumHeight + (j+1)%NumHeight].U;
+    float Uijm = _BufferRead[i * NumHeight + (j-1+NumHeight)%NumHeight].U;
+
+    float Vij = _BufferRead[i*NumHeight+j].V;
+    float Vipj =_BufferRead[((i + 1)%NumWidth)* NumHeight + j].V;
+    float Vimj = _BufferRead[((i - 1+NumWidth)%NumWidth)*NumHeight + j].V;
+    float Vijp = _BufferRead[i * NumHeight + (j+1)%NumHeight].V;
+    float Vijm = _BufferRead[i * NumHeight + (j-1+NumHeight)%NumHeight].V;
+
+    float Bij = BCalculator(Uij,Uipj,Uimj,Uijp,Uijm,Vij,Vijm,Vijp,Vimj,Vipj);
+
+    _BufferWrite[id.x].B = Bij;
+}
+
+
+
+
+

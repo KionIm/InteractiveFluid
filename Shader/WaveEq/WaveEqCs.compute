@@ -1,0 +1,129 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+struct WaveEqData
+{
+    float Cm;
+    float Cc;
+    float Cw;
+};
+
+cbuffer CB {
+    int NumWidth;
+    int NumHeight;
+    float sharpness;
+    float mousePosu;
+    float mousePosv;
+    float Attenuation;
+    float mouse_move_x;
+    float mouse_move_y;
+    float coef;
+    float CoefOnClick1;
+    float CoefOnClick2;
+    float CoefOnClick3;
+
+};
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWStructuredBuffer<WaveEqData> _BufferR;
+RWStructuredBuffer<WaveEqData> _BufferG;
+RWStructuredBuffer<WaveEqData> _BufferB;
+
+[numthreads(1000,1,1)]
+
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x / NumHeight;
+    uint j = id.x % NumHeight;
+
+    float Cij1 = _BufferR[i*NumHeight+j].Cc;
+    float Cipj1 =_BufferR[((i + 1)%NumWidth)* NumHeight + j].Cc;
+    float Cimj1 = _BufferR[((i - 1+NumWidth)%NumWidth)*NumHeight + j].Cc;
+    float Cijp1 = _BufferR[i * NumHeight + (j+1)%NumHeight].Cc;
+    float Cijm1 = _BufferR[i * NumHeight + (j-1+NumHeight)%NumHeight].Cc;
+    float Cijn1 = _BufferR[i*NumHeight+j].Cm;
+
+    //float v2 = mouse_move_x*mouse_move_x + mouse_move_y*mouse_move_y;
+    float v21 = 1.0;
+
+    Cij1 = 2*Cij1 - Cijn1 + coef*v21*(Cipj1 + Cimj1 + Cijp1 + Cijm1 -4*Cij1);
+
+    float Value1 = -sharpness*(pow((float)(i - mousePosu*NumWidth) / (NumWidth / 2), 2) 
+                  + pow((float)(j - mousePosv*NumHeight) / (NumHeight/2), 2));
+    float ColMouse1 = CoefOnClick1*exp(Value1);
+
+    Cij1 = max(Cij1,ColMouse1);
+
+    if(Cij1<0.003){
+        Cij1 = 0.0;
+    }
+
+    Cij1 = pow(Cij1,Attenuation);
+
+    //Cij1 = 0.0;
+
+    _BufferR[id.x].Cw = Cij1;
+
+    //-----------------------------------------------------------------------
+
+    float Cij2 = _BufferG[i*NumHeight+j].Cc;
+    float Cipj2 =_BufferG[((i + 1)%NumWidth)* NumHeight + j].Cc;
+    float Cimj2 = _BufferG[((i - 1+NumWidth)%NumWidth)*NumHeight + j].Cc;
+    float Cijp2 = _BufferG[i * NumHeight + (j+1)%NumHeight].Cc;
+    float Cijm2 = _BufferG[i * NumHeight + (j-1+NumHeight)%NumHeight].Cc;
+    float Cijn2 = _BufferG[i*NumHeight+j].Cm;
+
+    //float v2 = mouse_move_x*mouse_move_x + mouse_move_y*mouse_move_y;
+    float v22 = 1.0;
+
+    Cij2 = 2*Cij2 - Cijn2 + coef*v22*(Cipj2 + Cimj2 + Cijp2 + Cijm2 -4*Cij2);
+
+    float Value2 = -sharpness*(pow((float)(i - mousePosu*NumWidth) / (NumWidth / 2), 2) 
+                  + pow((float)(j - mousePosv*NumHeight) / (NumHeight/2), 2));
+    float ColMouse2 = CoefOnClick2*exp(Value2);
+
+    Cij2 = max(Cij2,ColMouse2);
+
+        if(Cij2<0.003){
+        Cij2 = 0.0;
+    }
+
+    Cij2 = pow(Cij2,Attenuation);
+
+    //Cij2=0.0;
+
+    _BufferG[id.x].Cw = Cij2;
+
+     //-----------------------------------------------------------------------
+
+    float Cij3 = _BufferB[i*NumHeight+j].Cc;
+    float Cipj3 =_BufferB[((i + 1)%NumWidth)* NumHeight + j].Cc;
+    float Cimj3 = _BufferB[((i - 1+NumWidth)%NumWidth)*NumHeight + j].Cc;
+    float Cijp3 = _BufferB[i * NumHeight + (j+1)%NumHeight].Cc;
+    float Cijm3 = _BufferB[i * NumHeight + (j-1+NumHeight)%NumHeight].Cc;
+    float Cijn3 = _BufferB[i*NumHeight+j].Cm;
+
+    //float v2 = mouse_move_x*mouse_move_x + mouse_move_y*mouse_move_y;
+    float v23 = 1.0;
+
+    Cij3 = 2*Cij3 - Cijn3 + coef*v23*(Cipj3 + Cimj3 + Cijp3 + Cijm3 -4*Cij3);
+
+    float Value3 = -sharpness*(pow((float)(i - mousePosu*NumWidth) / (NumWidth / 2), 2) 
+                  + pow((float)(j - mousePosv*NumHeight) / (NumHeight/2), 2));
+    float ColMouse3 = CoefOnClick3*exp(Value3);
+
+    Cij3 = max(Cij3,ColMouse3);
+
+        if(Cij3<0.003){
+        Cij3 = 0.0;
+    }
+
+    Cij3 = pow(Cij3,Attenuation);
+
+    //Cij3=0.0;
+
+    _BufferB[id.x].Cw = Cij3;
+
+
+}

@@ -1,0 +1,111 @@
+#pragma kernel CSMain
+
+#define dx 0.1
+#define dt 0.2
+#define kappa 0.5*dx*dx/dt
+
+struct DiffEqData
+{
+    float Cr;
+    float Cw;
+};
+
+cbuffer CB {
+    float exkappa;
+    int NumWidth;
+    int NumHeight;
+    float sharpness;
+    float sharpnessT;
+    float mousePosu;
+    float mousePosv;
+    float Attenuation;
+    float CoefTime;
+    float time;
+};
+
+RWStructuredBuffer<DiffEqData> _BufferR;
+RWStructuredBuffer<DiffEqData> _BufferG;
+RWStructuredBuffer<DiffEqData> _BufferB;
+
+float CCal(float Cij,float Cipj,float Cimj,float Cijp,float Cijm,
+           float Coefc,int i,int j,float timec,float CoefTra)
+{
+    Cij += exkappa * dt * kappa * ((Cipj - 2.0 * Cij + Cimj) 
+         + (Cijp - 2.0 * Cij + Cijm)) / (dx*dx );
+
+    float Value1 = -(pow((float)(i - mousePosu*NumWidth 
+                  + 20*sin(30*time)) / (NumWidth / 2), 2) 
+                  + pow((float)(j - mousePosv*NumHeight 
+                  + 20*cos(40*time)) / (NumHeight/2), 2));
+    //float ColMouse = CoefTime*Coefc*exp(sharpnessT*Value1);
+    float ColMouse = CoefTime*Coefc*exp(sharpnessT*Value1);
+
+    float Value = -(pow((float)(i - mousePosu*NumWidth) / (NumWidth / 2), 2) 
+                  + pow((float)(j - mousePosv*NumHeight) / (NumHeight/2), 2));
+    float Trac = CoefTra*pow(timec,0.1)*exp(sharpness*Value);
+
+    Cij = max(Cij,Trac);
+
+    Cij = max(Cij,ColMouse);
+    //Cij = ColMouse;
+
+    if(Cij<0.003){
+        Cij = 0.0;
+    }
+
+    Cij = pow(Cij,Attenuation);
+
+    return Cij;
+}
+
+[numthreads(1000,1,1)]
+
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x / NumHeight;
+    uint j = id.x % NumHeight;
+
+    float timeR = 0.5*sin(time)+0.5;
+    float timeG = 0.5*sin(time + 1.0)+0.5;
+    float timeB = 0.5*sin(time + 2.0)+0.5;
+
+    float CoefR = 0.1*cos(10*time) + 0.2;
+    float CoefG = 0.3*cos(10*time+1.0) + 0.3;
+    float CoefB = 0.2*cos(10*time+2.0) + 0.8;
+
+    float CoefTraR = 0.1*cos(10*0.4*time) + 0.2;
+    float CoefTraG = 0.3*cos(10*0.5*time + 0.6) + 0.3;
+    float CoefTraB = 0.2*cos(10*0.3*time + 1.2) + 0.8;
+ 
+    float Cij1 = _BufferR[i*NumHeight+j].Cr;
+    float Cipj1 =_BufferR[((i + 1)%NumWidth)* NumHeight + j].Cr;
+    float Cimj1 = _BufferR[((i - 1+NumWidth)%NumWidth)*NumHeight + j].Cr;
+    float Cijp1 = _BufferR[i * NumHeight + (j+1)%NumHeight].Cr;
+    float Cijm1 = _BufferR[i * NumHeight + (j-1+NumHeight)%NumHeight].Cr;
+
+    Cij1 = CCal(Cij1,Cipj1,Cimj1,Cijp1,Cijm1,CoefR,i,j,timeR,CoefTraR);
+    
+    //-------------------------------------------------
+    float Cij2 = _BufferG[i*NumHeight+j].Cr;
+    float Cipj2 =_BufferG[((i + 1)%NumWidth)* NumHeight + j].Cr;
+    float Cimj2 = _BufferG[((i - 1+NumWidth)%NumWidth)*NumHeight + j].Cr;
+    float Cijp2 = _BufferG[i * NumHeight + (j+1)%NumHeight].Cr;
+    float Cijm2 = _BufferG[i * NumHeight + (j-1+NumHeight)%NumHeight].Cr;
+
+    Cij2 = CCal(Cij2,Cipj2,Cimj2,Cijp2,Cijm2,CoefG,i,j,timeG,CoefTraG);
+    
+    //------------------------------------------------
+    float Cij3 = _BufferB[i*NumHeight+j].Cr;
+    float Cipj3 =_BufferB[((i + 1)%NumWidth)* NumHeight + j].Cr;
+    float Cimj3 = _BufferB[((i - 1+NumWidth)%NumWidth)*NumHeight + j].Cr;
+    float Cijp3 = _BufferB[i * NumHeight + (j+1)%NumHeight].Cr;
+    float Cijm3 = _BufferB[i * NumHeight + (j-1+NumHeight)%NumHeight].Cr;
+
+    Cij3 = CCal(Cij3,Cipj3,Cimj3,Cijp3,Cijm3,CoefB,i,j,timeB,CoefTraB);
+
+    //-----------------------------------------------
+
+    _BufferR[id.x].Cw = Cij1;
+    _BufferG[id.x].Cw = Cij2;
+    _BufferB[id.x].Cw = Cij3;
+}

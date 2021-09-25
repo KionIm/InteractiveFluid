@@ -1,0 +1,159 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+#define NUM_THREAD_X 8 
+#define NUM_THREAD_Y 1
+#define NUM_THREAD_Z 1 
+
+
+struct NSParticleData
+{
+	float3 velocity; 
+	float3 position; 
+};
+
+struct NSEqPaData
+{
+    float P;
+    float U;
+    float V;
+    float B;
+};
+
+cbuffer CB
+{
+	float  _TimeStep;  
+	int NumWidth;
+    int NumHeight;
+	int IniNumH;
+	int count;
+	int CountDipict;
+	int DipictStep;
+	int NumP;
+	float Aspect;
+	float time;
+    float2  mouse;
+    float2  resolution;
+    float NoiseIntensity;
+	float NoiseAdjust;
+	float speed;
+	int TrailLength;
+
+    int   oct;
+    float per;
+    float PI;
+    float cCorners ;
+    float cSides  ;
+    float cCenter ;
+}
+
+
+
+float interpolate(float a, float b, float x){
+    float f = (1.0 - cos(x * PI)) * 0.5;
+    return a * (1.0 - f) + b * f;
+}
+
+float rnd(float2 p){
+    return frac(sin(dot(p ,float2(12.9898,78.233))) * 43758.5453);
+}
+
+float irnd(float2 p){
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float4 v = float4(rnd(float2(i.x,       i.y      )),
+                  rnd(float2(i.x + 1.0, i.y      )),
+                  rnd(float2(i.x,       i.y + 1.0)),
+                  rnd(float2(i.x + 1.0, i.y + 1.0)));
+    return interpolate(interpolate(v.x, v.y, f.x), interpolate(v.z, v.w, f.x), f.y);
+}
+
+float noise(float2 p){
+    float t = 0.0;
+    for(int i = 0; i < oct; i++){
+        float freq = pow(2.0, float(i));
+        float amp  = pow(per, float(oct - i));
+        t += irnd(float2(p.x / freq, p.y / freq)) * amp;
+    }
+    return t;
+}
+
+float snoise(float2 p, float2 q, float2 r){
+    return noise(float2(p.x,       p.y      )) *        q.x  *        q.y  +
+           noise(float2(p.x,       p.y + r.y)) *        q.x  * (1.0 - q.y) +
+           noise(float2(p.x + r.x, p.y      )) * (1.0 - q.x) *        q.y  +
+           noise(float2(p.x + r.x, p.y + r.y)) * (1.0 - q.x) * (1.0 - q.y);
+}
+
+RWStructuredBuffer<NSParticleData> _ParticleBuffer;
+RWStructuredBuffer<NSParticleData> _ParticleTrailBuffer;
+RWStructuredBuffer<NSParticleData> _ParticleRenderBuffer;
+RWStructuredBuffer<NSEqPaData> _NSEqBufferO;
+RWStructuredBuffer<NSEqPaData> _NSEqBufferN;
+
+[numthreads(NUM_THREAD_X, NUM_THREAD_Y, NUM_THREAD_Z)]
+
+void CSMain(uint3 DTid : SV_DispatchThreadID)
+{
+	int idx = DTid.x;
+	//int ix = idx / NumHeight;//IniNumH;
+ //   int iy = idx % NumHeight;//IniNumH;
+	int ix = idx / IniNumH;
+    int iy = idx % IniNumH;
+
+	oct  = 8;
+    per  = 0.5;
+    PI   = 3.1415926;
+    cCorners = 1.0 / 16.0;
+    cSides   = 1.0 / 8.0;
+    cCenter  = 1.0 / 4.0;
+
+	float3 position = _ParticleBuffer[idx].position;
+	float3 velocityPa = _ParticleBuffer[idx].velocity;
+
+	int id = int((position.x/Aspect+0.5)*NumWidth)*NumHeight 
+	       + int((position.y+0.5)*NumHeight);
+	float UO = _NSEqBufferO[id].U;
+	float UN = _NSEqBufferN[id].U;
+	float VO = _NSEqBufferO[id].V;
+	float VN = _NSEqBufferN[id].V;
+
+	float2 p = float2(ix + int(NoiseAdjust*time),iy + int(NoiseAdjust*time)); 
+
+	float2 t = p; 
+	float n = noise(50.0*t); 
+	
+	float3 velocity; 
+
+	velocity.x = UN + NoiseIntensity*(n - 0.5);
+	velocity.y = speed*VN;
+	velocity.z = 0.0;
+	//velocity.x = velocityPa.x + 0.3*(UN-UO);
+	//velocity.y = velocityPa.y + 0.3*(VN-VO);
+	velocity.z = 0.0;
+
+	position += velocity * _TimeStep;
+
+	if(position.x > 0.5*Aspect){
+		position.x -= Aspect;
+	}
+	if(position.x < -0.5*Aspect){
+		position.x += Aspect;
+	}
+		if(position.y > 0.5){
+		position.y -= 1.0;
+	}
+	if(position.y < -0.5){
+		position.y += 1.0;
+	}
+
+	_ParticleBuffer[idx].velocity = velocity;
+	_ParticleBuffer[idx].position = position;
+
+	_ParticleTrailBuffer[count*NumP + idx].position = position;
+
+	for (int i=0 ;i<TrailLength/DipictStep;i++){
+		_ParticleRenderBuffer[i*NumP + idx] = _ParticleTrailBuffer[(DipictStep*i+CountDipict)*NumP + idx];
+	}
+
+}

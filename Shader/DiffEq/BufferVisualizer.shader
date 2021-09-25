@@ -1,0 +1,83 @@
+Shader "Unlit/BufferVisualizer"
+{
+    Properties
+    {
+        _MainTex ("Texture", 2D) = "white" {}
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Transparent" "Queue"="Transparent"}
+        Blend One One
+
+        //Tags { "RenderType"="Opaque" }
+        LOD 100
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_fog
+
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                UNITY_FOG_COORDS(1)
+                float4 vertex : SV_POSITION;
+            };
+
+            struct DiffEqData
+            {
+                float Cr;
+                float Cw;
+            };
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            int NumWidth;
+            int NumHeight;
+            float time;
+
+            StructuredBuffer<DiffEqData> _DiffEqBufferR;
+            StructuredBuffer<DiffEqData> _DiffEqBufferG;
+            StructuredBuffer<DiffEqData> _DiffEqBufferB;
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                UNITY_TRANSFER_FOG(o,o.vertex);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_Target
+            {
+                float2 p = i.uv.xy;
+                int ix = int(p.x * NumWidth);
+                int iy = int(p.y * NumHeight);
+
+                float cr = _DiffEqBufferR[ix*NumHeight + iy].Cr;
+                float cg = _DiffEqBufferG[ix*NumHeight + iy].Cr;
+                float cb = _DiffEqBufferB[ix*NumHeight + iy].Cr;
+
+                //float cr = c*(0.5*sin(3*time)+0.5) + 10*c1;
+                //float cg = c*(0.4*sin(6*time)+0.6) + 10*c2;
+                //float cb = c*(0.4*cos(9*time)+0.6) + 10*c3;
+
+                fixed4 col = float4(cr,cg,cb,1.0);
+
+                return col;
+            }
+            ENDCG
+        }
+    }
+}

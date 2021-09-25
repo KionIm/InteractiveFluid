@@ -1,0 +1,61 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+struct NSEqData
+{
+    float P;
+    float U;
+    float V;
+    float B;
+};
+
+struct NSEqPData
+{
+    float P;
+};
+
+cbuffer CB {
+    int NumWidth;
+    int NumHeight;
+    //float sharpness;
+    //float mousePosu;
+    //float mousePosv;
+    float dx;
+    float dy;
+    //float dt;
+    //float rho;
+};
+
+float PCalculator(float Pipj,float Pimj,float Pijm,float Pijp,float Bij){
+
+    float Pij;
+
+    Pij = (Pipj+Pimj)*dy*dy;
+    Pij += (Pijp + Pijm)*dx*dx;
+    Pij -= Bij*dx*dx*dy*dy;
+    Pij /= 2*(dx*dx + dy*dy);
+
+    return Pij;
+}
+
+RWStructuredBuffer<NSEqPData> _BufferPRead;
+RWStructuredBuffer<NSEqPData> _BufferPWrite;
+RWStructuredBuffer<NSEqData> _BufferRead;
+RWStructuredBuffer<NSEqData> _BufferWrite;
+
+[numthreads(1000,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x / NumHeight;
+    uint j = id.x % NumHeight;
+
+    float Bij = _BufferWrite[i*NumHeight+j].B;
+    float Pipj =_BufferPRead[((i + 1)%NumWidth)* NumHeight + j].P;
+    float Pimj = _BufferPRead[((i - 1+NumWidth)%NumWidth)*NumHeight + j].P;
+    float Pijp = _BufferPRead[i * NumHeight + (j+1)%NumHeight].P;
+    float Pijm = _BufferPRead[i * NumHeight + (j-1+NumHeight)%NumHeight].P;
+
+    float Pij = PCalculator(Pipj,Pimj,Pijm,Pijp,Bij);
+
+    _BufferPWrite[id.x].P = Pij;
+}
